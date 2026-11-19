@@ -1,0 +1,13 @@
+{
+  "visitors": [
+    {"id": "V-1001", "label": "访客甲", "created_at": "2026-11-17T08:00:00Z"},
+    {"id": "V-1002", "label": "访客乙", "created_at": "2026-11-17T08:05:00Z"}
+  ],
+  "hits": [
+    {"id": "H1", "visitor_id": "V-1001", "event_ts": "2026-11-17T08:10:00Z", "page_path": "/home", "event_name": "view"},
+    {"id": "H2", "visitor_id": "V-1001", "event_ts": "2026-11-17T08:12:00Z", "page_path": "/search", "event_name": "view"},
+    {"id": "H3", "visitor_id": "V-1001", "event_ts": "2026-11-17T08:13:00Z", "page_path": "/item/1", "event_name": "click"},
+    {"id": "H4", "visitor_id": "V-1002", "event_ts": "2026-11-17T08:20:00Z", "page_path": "/home", "event_name": "view"},
+    {"id": "H5", "visitor_id": "V-1002", "event_ts": "2026-11-17T08:21:30Z", "page_path": "/cart", "event_name": "view"}
+  ]
+}
