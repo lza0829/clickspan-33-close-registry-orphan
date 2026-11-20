@@ -8,6 +8,13 @@ const details = ref({})
 const err = ref('')
 const busyId = ref('')
 const attestations = ref({})
+const closingAttestations = ref({})
+
+// 织机顶栏「当前会话」：只认访客 visitor_open 物化指针且状态仍 open 的会话，
+// 已关 id 永远不会被点亮（指针在关闭事务内同成败卸掉/改指）。
+function isCurrentOpen(s) {
+  return s.status === 'open' && s.visitor_open === s.id
+}
 
 async function load() {
   err.value = ''
@@ -47,6 +54,17 @@ async function verify(id) {
   }
 }
 
+async function verifyClosing(id) {
+  try {
+    closingAttestations.value = {
+      ...closingAttestations.value,
+      [id]: await api.closingAttestation(id),
+    }
+  } catch (e) {
+    err.value = String(e.message || e)
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -80,8 +98,14 @@ onMounted(load)
               <span :class="s.status === 'closed' ? 'badge badge-closed' : 'badge badge-open'">
                 {{ s.status === 'closed' ? 'closed 已固化' : 'open' }}
               </span>
+              <span v-if="isCurrentOpen(s)" class="badge badge-current">当前会话</span>
+              <span
+                v-else-if="s.visitor_open && s.visitor_open !== s.id"
+                class="badge badge-ghost-badge"
+              >指针 → {{ s.visitor_open }}</span>
               <template v-if="details[s.id]?.closing">
                 <div class="mono closing-meta">
+                  close_id {{ details[s.id].closing.close_id }} ·
                   关闭于 {{ details[s.id].closing.closed_at }} ·
                   成员 {{ details[s.id].closing.hit_count }} 点 ·
                   哈希 {{ details[s.id].closing.content_hash.slice(0, 16) }}…
@@ -101,6 +125,11 @@ onMounted(load)
                 class="btn btn-small btn-ghost"
                 @click="verify(s.id)"
               >核对</button>
+              <button
+                v-if="s.status === 'closed'"
+                class="btn btn-small btn-ghost"
+                @click="verifyClosing(s.id)"
+              >关闭登记核证</button>
             </div>
           </div>
           <div class="beads" v-if="details[s.id]">
@@ -120,6 +149,23 @@ onMounted(load)
             <template v-else>
               <span class="badge badge-bad">核对失败</span>
               <span class="mono">{{ attestations[s.id].checks }}</span>
+            </template>
+          </div>
+          <div v-if="closingAttestations[s.id]" class="attestation">
+            <template v-if="closingAttestations[s.id].verified">
+              <span class="badge badge-ok">关闭登记一致</span>
+              <span class="mono">
+                status=closed · close_id {{ closingAttestations[s.id].close_id }} ·
+                visitor_open {{ closingAttestations[s.id].visitor_open || 'NULL（已卸）' }}
+                · 结论 {{ closingAttestations[s.id].conclusion }}
+              </span>
+            </template>
+            <template v-else>
+              <span class="badge badge-bad">关闭登记撕裂</span>
+              <span class="mono">
+                结论 {{ closingAttestations[s.id].conclusion }} ·
+                {{ closingAttestations[s.id].checks }}
+              </span>
             </template>
           </div>
         </article>

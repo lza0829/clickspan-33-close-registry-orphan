@@ -1,8 +1,12 @@
 """已关闭会话拒收新击点（功能题实现）。
 
-收流闸：收流时若击点显式指向 closed 会话，或其访客已无 open 会话可挂
-（最新会话已关闭），不得写入或新建到已关闭会话——一律隔离进 quarantine，
-保证关闭后旧成员不被追加。
+收流闸：收流时若击点显式指向 closed 会话，或访客已无 open 会话可挂
+（visitor_open 指针为空 / 最新会话已关闭），不得写入或新建到已关闭会话
+——一律隔离进 quarantine，保证关闭后旧成员不被追加。
+
+指针协同：路由优先采用 visitors.open_session_id 物化指针（与关闭入口同事务
+卸指/改指）；若指针指向的会话已 closed（撕裂），绝不挂它，回退到真正的
+最新 open，并由收流服务在同事务内修正指针。
 
 关闭登记与核证在 app.modules.explicit_session_close。
 """
@@ -25,7 +29,8 @@ def route_hit(conn, hit: dict):
     返回 (session_id, rejected)：
       - 显式带 session_id 且该会话 closed → 拒收（隔离）
       - 显式带 session_id 且 open → 挂该会话
-      - 未带 session_id：访客仍有 open 会话则挂最新 open（与基座同源）；
+      - 未带 session_id：先看 visitor_open 物化指针，指向 open 则挂它；
+        指针撕裂（指向 closed）或为空时回退查访客名下最新 open；
         无 open 且最新会话已 closed → 拒收，不新建到旧会话；
         访客无任何会话 → 交由收流服务新建 open 会话
     """
@@ -41,6 +46,21 @@ def route_hit(conn, hit: dict):
             return None, True
         return explicit_sid, False
 
+    # 指针物化路径：visitor_open 即访客「当前会话」，织机顶栏与收流同源
+    visitor = conn.execute(
+        "SELECT open_session_id FROM visitors WHERE id=?",
+        (vid,),
+    ).fetchone()
+    pointer_sid = visitor["open_session_id"] if visitor else None
+    if pointer_sid:
+        pointed = conn.execute(
+            "SELECT id, status FROM sessions WHERE id=?",
+            (pointer_sid,),
+        ).fetchone()
+        if pointed and pointed["status"] == "open":
+            return pointer_sid, False
+        # 撕裂指针：仍指已关会话，绝不可挂；落到下面的 open 回退/拒收路径
+
     latest_open = conn.execute(
         """
         SELECT id FROM sessions
@@ -48,9 +68,9 @@ def route_hit(conn, hit: dict):
         ORDER BY started_at DESC, id DESC LIMIT 1
         """,
         (vid,),
-    ).fetchone()
+    ).fetchall()
     if latest_open:
-        return latest_open["id"], False
+        return latest_open[0]["id"], False
 
     latest = conn.execute(
         """

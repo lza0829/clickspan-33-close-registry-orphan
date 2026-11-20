@@ -5,17 +5,23 @@ def list_sessions(conn, visitor_id: str | None = None):
     if visitor_id:
         rows = conn.execute(
             """
-            SELECT id, visitor_id, started_at, ended_at, hit_count, status
-            FROM sessions WHERE visitor_id=?
-            ORDER BY started_at
+            SELECT s.id, s.visitor_id, s.started_at, s.ended_at, s.hit_count,
+                   s.status, v.open_session_id AS visitor_open
+            FROM sessions s
+            LEFT JOIN visitors v ON v.id = s.visitor_id
+            WHERE s.visitor_id=?
+            ORDER BY s.started_at
             """,
             (visitor_id,),
         ).fetchall()
     else:
         rows = conn.execute(
             """
-            SELECT id, visitor_id, started_at, ended_at, hit_count, status
-            FROM sessions ORDER BY started_at
+            SELECT s.id, s.visitor_id, s.started_at, s.ended_at, s.hit_count,
+                   s.status, v.open_session_id AS visitor_open
+            FROM sessions s
+            LEFT JOIN visitors v ON v.id = s.visitor_id
+            ORDER BY s.started_at
             """
         ).fetchall()
     return [dict(r) for r in rows]
@@ -39,11 +45,17 @@ def session_detail(conn, session_id: str):
     ).fetchone()
     # 织机协同：closed 会话须带关闭登记，前端按登记渲染只读快照
     closing = esc.get_closing(conn, session_id)
+    # 指针协同：带访客当前 open 物化指针，顶栏据此点亮「当前会话」
+    visitor = conn.execute(
+        "SELECT open_session_id FROM visitors WHERE id=?",
+        (sess["visitor_id"],),
+    ).fetchone()
     return {
         "session": dict(sess),
         "hits": [dict(h) for h in hits],
         "proof": dict(proof) if proof else None,
         "closing": closing,
+        "visitor_open": visitor["open_session_id"] if visitor else None,
     }
 
 

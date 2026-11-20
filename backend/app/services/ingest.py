@@ -37,6 +37,20 @@ def run_batch() -> dict:
             # 收流闸：关闭后的会话拒收（同事务，拒收进 quarantine）
             sid, is_rejected = reject_gate.route_hit(conn, hit)
             if is_rejected:
+                # 写闸协同：指针若仍撕裂地指向已关会话，同事务卸成 NULL
+                conn.execute(
+                    """
+                    UPDATE visitors SET open_session_id = NULL
+                    WHERE id = ?
+                      AND open_session_id IS NOT NULL
+                      AND EXISTS (
+                        SELECT 1 FROM sessions s
+                        WHERE s.id = visitors.open_session_id
+                          AND s.status != 'open'
+                      )
+                    """,
+                    (vid,),
+                )
                 reject_gate.quarantine_hit(
                     conn,
                     hit,
@@ -56,6 +70,15 @@ def run_batch() -> dict:
                     )
                     rejected += 1
                     continue
+                # 指针物化：路由落到 open 会话但访客指针未指向它（撕裂/为空）时补齐
+                conn.execute(
+                    """
+                    UPDATE visitors SET open_session_id = ?
+                    WHERE id = ?
+                      AND (open_session_id IS NULL OR open_session_id != ?)
+                    """,
+                    (sid, vid, sid),
+                )
             else:
                 sid = f"S-{vid}-{uuid.uuid4().hex[:6]}"
                 conn.execute(
@@ -64,6 +87,11 @@ def run_batch() -> dict:
                     VALUES (?,?,?,?,0,'open')
                     """,
                     (sid, vid, hit["event_ts"], hit["event_ts"]),
+                )
+                # 新会话即访客当前 open：物化指针，与关闭卸指同表同列
+                conn.execute(
+                    "UPDATE visitors SET open_session_id=? WHERE id=?",
+                    (sid, vid),
                 )
             conn.execute(
                 """

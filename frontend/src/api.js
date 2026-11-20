@@ -21,6 +21,9 @@ export const api = {
     req(`/api/sessions/${encodeURIComponent(id)}/close`, { method: 'POST' }),
   attestation: (id) =>
     req(`/api/sessions/${encodeURIComponent(id)}/attestation`),
+  closingAttestation: (id) =>
+    req(`/api/sessions/${encodeURIComponent(id)}/closing-attestation`),
+  closingAttestations: () => req('/api/closing-attestations'),
   quarantine: () => req('/api/quarantine'),
   ingest: () => req('/api/ingest/run', { method: 'POST' }),
   proofs: (sessionId) =>

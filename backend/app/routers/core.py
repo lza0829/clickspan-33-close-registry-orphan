@@ -31,7 +31,7 @@ def list_visitors():
     conn = connect()
     try:
         rows = conn.execute(
-            "SELECT id, label, created_at FROM visitors ORDER BY id"
+            "SELECT id, label, created_at, open_session_id FROM visitors ORDER BY id"
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -85,6 +85,38 @@ def session_attestation(session_id: str):
             return esc.attestation(conn, session_id)
         except esc.CloseError as e:
             raise HTTPException(404, str(e))
+    finally:
+        conn.close()
+
+
+@router.get("/sessions/{session_id}/closing-attestation")
+def session_closing_attestation(session_id: str):
+    """只读关闭登记核证：会话状态、close_id 登记、visitor_open 指针、结论。
+
+    基线所无的新接口；纯读，不做任何写操作。结论 conclusion=consistent
+    表示三方同成败；否则给出具体失败原因（登记悬空 / 指针未卸等）。
+    会话不存在或尚无关闭登记 → 404（与内容核证接口同语义）；
+    全量含异常行的核证走 /api/closing-attestations。
+    """
+    conn = connect()
+    try:
+        try:
+            att = esc.registry_attestation(conn, session_id)
+        except esc.CloseError as e:
+            raise HTTPException(404, str(e))
+        if not att["checks"]["registry_row_present"]:
+            raise HTTPException(404, "会话未关闭，无关闭登记核证")
+        return att
+    finally:
+        conn.close()
+
+
+@router.get("/closing-attestations")
+def list_closing_attestations():
+    """全量关闭登记核证（核证页）：每个 closed 会话/登记行的三方结论一览。"""
+    conn = connect()
+    try:
+        return esc.list_registry_attestations(conn)
     finally:
         conn.close()
 

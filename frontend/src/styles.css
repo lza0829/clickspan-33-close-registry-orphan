@@ -244,6 +244,8 @@ table.data th { color: var(--muted); font-weight: 500; }
 .badge-closed { background: var(--copper-soft); border: 1px solid var(--copper); color: #7a3f1d; }
 .badge-ok { background: #e3f3e6; border: 1px solid #4f9d69; color: #256038; }
 .badge-bad { background: #fbe3e1; border: 1px solid var(--danger); color: var(--danger); }
+.badge-current { background: #e7f0fd; border: 1px solid #3f6fb5; color: #1d4380; margin-left: 0.35rem; }
+.badge-ghost-badge { background: #fff; border: 1px solid var(--line); color: var(--muted); margin-left: 0.35rem; }
 
 .lane-closed { border-left-color: var(--copper); opacity: 0.92; }
 .lane-closed .bead-sealed {
